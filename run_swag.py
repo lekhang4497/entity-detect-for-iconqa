@@ -24,6 +24,7 @@ import sys
 from dataclasses import dataclass, field
 from itertools import chain
 from typing import Optional, Union
+from unittest import result
 
 import datasets
 import numpy as np
@@ -328,7 +329,8 @@ def main():
     )
 
     # When using your own dataset or a different dataset from swag, you will probably need to change this.
-    ending_names = [f"ending{i}" for i in range(4)]
+    NUM_OF_CHOICE = 5
+    ending_names = [f"ending{i}" for i in range(NUM_OF_CHOICE)]
     context_name = "sent1"
     question_header_name = "sent2"
 
@@ -350,7 +352,7 @@ def main():
 
     # Preprocessing the datasets.
     def preprocess_function(examples):
-        first_sentences = [[context] * 4 for context in examples[context_name]]
+        first_sentences = [[context] * NUM_OF_CHOICE for context in examples[context_name]]
         question_headers = examples[question_header_name]
         second_sentences = [
             [f"{header} {examples[end][i]}" for end in ending_names] for i, header in enumerate(question_headers)
@@ -369,7 +371,7 @@ def main():
             padding="max_length" if data_args.pad_to_max_length else False,
         )
         # Un-flatten
-        return {k: [v[i : i + 4] for i in range(0, len(v), 4)] for k, v in tokenized_examples.items()}
+        return {k: [v[i : i + NUM_OF_CHOICE] for i in range(0, len(v), NUM_OF_CHOICE)] for k, v in tokenized_examples.items()}
 
     if training_args.do_train:
         if "train" not in raw_datasets:
@@ -455,6 +457,13 @@ def main():
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
+
+    # if training_args.do_predict:
+        # logger.info("*** Predict ***")
+
+        # results = trainer.predict(eval_dataset)
+        # print(results)
+        # print(np.argmax(results.predictions, axis=1))
 
     kwargs = dict(
         finetuned_from=model_args.model_name_or_path,

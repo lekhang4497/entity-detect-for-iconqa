@@ -51,11 +51,11 @@ def classify_all_entity(img_path, min_pixels=100):
     gimg = rgb2gray(img)
     bboxs = extract_bbox(gimg)
     bboxs = [b for b in bboxs if abs(b[2]-b[0]+1)*abs(b[3]-b[1]) >= min_pixels]
-    pis = []
+    # pis = []
     for b in bboxs:
         top, left, bottom, right = b
         pi = Image.fromarray(img[top:bottom+1, left:right+1])
         entity_class = classify_img(pi)
         ret.append(entity_class)
-        pis.append(pi)
-    return ret, pis
+        # pis.append(pi)
+    return ret

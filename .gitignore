@@ -1,8 +1,5 @@
-data/iconqa_data
-data/icon645
-data/img_choice_embeddings
-data/patch_embeddings
-saved_models
+*models
+*data
 
 *.zip
 *.pkl
@@ -12,7 +9,3 @@ saved_models
 *.ipynb_checkpoints
 *.pyc
 *__pycache__
-
-filtered_icon
-icon_data
-results
