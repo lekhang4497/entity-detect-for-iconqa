@@ -4,7 +4,7 @@ import os
 from tqdm import tqdm
 
 
-BASELINE_PREDICT = '/home/khangln/JAIST_DRIVE/WORK/IconQA/results/choose_img/exp_patch_transformer_ques_bert.json'
+BASELINE_PREDICT = '/home/khangln/JAIST_DRIVE/WORK/IconQA/results/choose_txt/exp_patch_transformer_ques_bert.json'
 PID_TO_INFO = '/home/khangln/JAIST_DRIVE/WORK/IconQA/my/eval/pid2info.json'
 
 with open(BASELINE_PREDICT) as f:
@@ -40,3 +40,4 @@ print(all_skills)
 
 for s in all_skills:
     eval_skill(s)
+eval_skill()

@@ -6,10 +6,11 @@ import os
 from collections import defaultdict
 from extract_entity import classify_all_entity
 
-SPLIT = 'val'
-ORIGIN_DATA_PATTERN = f'/home/khangln/JAIST_DRIVE/WORK/IconQA/data/iconqa_data/iconqa/{SPLIT}/choose_txt/*'
+SPLIT = 'test'
+TYPE = 'fill_in_blank'
+ORIGIN_DATA_PATTERN = f'/home/khangln/JAIST_DRIVE/WORK/IconQA/data/iconqa_data/iconqa/{SPLIT}/{TYPE}/*'
 PID2SKILL = '/home/khangln/JAIST_DRIVE/WORK/IconQA/data/iconqa_data/pid2skills.json'
-SKILL = 'algebra'
+# SKILL = 'algebra'
 
 data_folders = sorted(glob.glob(ORIGIN_DATA_PATTERN))
 
@@ -79,23 +80,58 @@ def gen_data_from_choose_txt(data_folders):
     return data
 
 
+def gen_data_from_fill_in_blank(data_folders):
+    data = []
+    for t in tqdm(data_folders):
+        pid = os.path.basename(t)
+        data_path = os.path.join(t, 'data.json')
+        with open(data_path) as f:
+            d = json.load(f)
+            question = d['question']
+            # Generate context sentence
+            img_path = os.path.join(t, 'image.png')
+            img_ents = classify_all_entity(img_path)
+            context = entities_to_sentence(img_ents)
+            label = d['answer']
+            data.append({
+                'pid': pid,
+                'target': label,
+                'source': question + " Context: " + context
+            })
+    return data
+
+
 # --- For generate test set for specific skill ---
 # with open(PID2SKILL) as f:
 #     pid2skill = json.load(f)
 
-# counting_fols = []
-# for fol in data_folders:
-#     pid = os.path.basename(fol)
-#     if SKILL in pid2skill[pid]:
-#         counting_fols.append(fol)
+# all_skills = set([x for v in pid2skill.values() for x in v])
+# print('Skills:', all_skills)
 
-# data = gen_data(counting_fols)
-# with open(f'test_skill_split/{SPLIT}_{SKILL}.json', 'w') as f:
-#     f.write('\n'.join([json.dumps(x) for x in data]))
+# for SKILL in all_skills:
+#     print(f'Generate test {TYPE} for skill: {SKILL}')
+#     counting_fols = []
+#     for fol in data_folders:
+#         pid = os.path.basename(fol)
+#         if SKILL in pid2skill[pid]:
+#             counting_fols.append(fol)
+
+#     if TYPE == 'choose_img':
+#         gen_func = gen_data_from_choose_img
+#     elif TYPE == 'choose_txt':
+#         gen_func = gen_data_from_choose_txt
+#     elif TYPE == 'fill_in_blank':
+#         gen_func = gen_data_from_fill_in_blank
+#     else:
+#         raise ValueError('Unknown TYPE')
+
+#     data = gen_func(counting_fols)
+#     with open(f'test_skill_split/{SPLIT}_{TYPE}_{SKILL}.json', 'w') as f:
+#         f.write('\n'.join([json.dumps(x) for x in data]))
 
 
 # --- For generate training set ---
 
-data = gen_data_from_choose_txt(data_folders)
-with open(f'{SPLIT}_captioned_iconqa_choosetxt.json', 'w') as f:
+data = gen_data_from_fill_in_blank(data_folders)
+with open(f'{SPLIT}_captioned_iconqa_{TYPE}.json', 'w') as f:
     f.write('\n'.join([json.dumps(x) for x in data]))
