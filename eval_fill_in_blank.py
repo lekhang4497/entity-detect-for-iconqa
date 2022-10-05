@@ -40,11 +40,13 @@ def gen_answer(texts):
 
 questions = []
 labels = []
+pids = []
 with open(TEST_FILE) as f:
     for line in f:
         d = json.loads(line)
         questions.append(d['source'])
         labels.append(d['target'])
+        pids.append(d['pid'])
 
 
 answers = gen_answer(questions)
@@ -54,6 +56,11 @@ print('Accuracy')
 metric = evaluate.load("exact_match")
 results = metric.compute(predictions=answers, references=labels)
 print(results)
+
+pred_dict = {pid: pred for pid, pred in zip(pids, answers)}
+dump_json = {'results': pred_dict}
+with open('predict_output/test_fill_in_blank.json', 'w') as f:
+    json.dump(dump_json, f, indent=4)
 
 # for a, l in zip(answers, labels):
 #     print(a, ' --- ', l)

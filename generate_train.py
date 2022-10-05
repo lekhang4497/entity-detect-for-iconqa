@@ -7,7 +7,7 @@ from collections import defaultdict
 from extract_entity import classify_all_entity
 
 SPLIT = 'test'
-TYPE = 'fill_in_blank'
+TYPE = 'choose_img'
 ORIGIN_DATA_PATTERN = f'/home/khangln/JAIST_DRIVE/WORK/IconQA/data/iconqa_data/iconqa/{SPLIT}/{TYPE}/*'
 PID2SKILL = '/home/khangln/JAIST_DRIVE/WORK/IconQA/data/iconqa_data/pid2skills.json'
 # SKILL = 'algebra'
@@ -25,6 +25,7 @@ def entities_to_sentence(entities):
 def gen_data_from_choose_img(data_folders):
     data = []
     for t in tqdm(data_folders):
+        pid = os.path.basename(t)
         data_path = os.path.join(t, 'data.json')
         with open(data_path) as f:
             d = json.load(f)
@@ -48,7 +49,8 @@ def gen_data_from_choose_img(data_folders):
                 **{f'ending{i}': sent for i, sent in enumerate(choices)},
                 'label': label,
                 'sent1': context,
-                'sent2': question
+                'sent2': question,
+                'pid': pid
             })
     return data
 
@@ -56,6 +58,7 @@ def gen_data_from_choose_img(data_folders):
 def gen_data_from_choose_txt(data_folders):
     data = []
     for t in tqdm(data_folders):
+        pid = os.path.basename(t)
         data_path = os.path.join(t, 'data.json')
         with open(data_path) as f:
             d = json.load(f)
@@ -75,7 +78,8 @@ def gen_data_from_choose_txt(data_folders):
                 **{f'ending{i}': sent for i, sent in enumerate(choices)},
                 'label': label,
                 'sent1': context,
-                'sent2': question
+                'sent2': question,
+                'pid': pid
             })
     return data
 
@@ -132,6 +136,6 @@ def gen_data_from_fill_in_blank(data_folders):
 
 # --- For generate training set ---
 
-data = gen_data_from_fill_in_blank(data_folders)
-with open(f'{SPLIT}_captioned_iconqa_{TYPE}.json', 'w') as f:
+data = gen_data_from_choose_img(data_folders)
+with open(f'{SPLIT}_captioned_iconqa_{TYPE}_with_ids.json', 'w') as f:
     f.write('\n'.join([json.dumps(x) for x in data]))

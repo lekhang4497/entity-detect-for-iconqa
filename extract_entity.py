@@ -50,7 +50,7 @@ def classify_all_entity(img_path, min_pixels=100):
                        235, img[:, :, 2] == 255)] = [255, 255, 255]
     gimg = rgb2gray(img)
     # Set almost white pixel to white
-    gimg[gimg > 0.85] = 1.0
+    # gimg[gimg > 0.85] = 1.0
 
     bboxs = extract_bbox(gimg)
     bboxs = [b for b in bboxs if abs(b[2]-b[0]+1)*abs(b[3]-b[1]) >= min_pixels]

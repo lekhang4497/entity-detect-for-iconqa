@@ -1,5 +1,7 @@
 *models
 *data
+predict_output
+test_skill_split
 
 *.zip
 *.pkl
