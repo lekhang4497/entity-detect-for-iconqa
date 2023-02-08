@@ -1,3 +1,5 @@
+from extract_entity import classify_all_entity, extract_bbox
+from icon_classify import classify_img
 from PIL import Image
 import tokenizers
 from skimage import io
@@ -15,19 +17,18 @@ import torch
 from streamlit import components
 import sys
 sys.path.append('../')
-from icon_classify import classify_img
-from extract_entity import classify_all_entity, extract_bbox
 
 
-ICON_QA_DATA_DIR = '/home/khangln/JAIST_DRIVE/WORK/IconQA/data/iconqa_data/iconqa/test'
+ICON_QA_DATA_DIR = '/home/khangln/JAIST_DRIVE/WORK/IconQA/data/iconqa_data/iconqa'
 
 PROBLEM_DICT = 'problems_dict.json'
 
-TASK = 'choose_img'
+# TASK = 'choose_img'
 
 DESC_MODEL = '/home/khangln/H_JAIST_DRIVE/WORK/iconqa_project/entity-detect-for-iconqa/models/bert-base-cased-train-both-img-txt'
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 
 @st.cache(hash_funcs={tokenizers.Tokenizer: id})
 def get_desc_model():
@@ -35,6 +36,23 @@ def get_desc_model():
     model = AutoModelForMultipleChoice.from_pretrained(DESC_MODEL)
     model.to(device)
     return model, tokenizer
+
+
+@st.cache()
+def get_question_dict():
+    st.write("Cache miss: get_question_dict() ran")
+    q_dict = {}
+    with open(PROBLEM_DICT) as f:
+        problem_dict = json.load(f)
+    for k, problem in problem_dict.items():
+        if problem['split'] not in q_dict:
+            q_dict[problem['split']] = {}
+        split_dict = q_dict[problem['split']]
+        if problem['ques_type'] not in split_dict:
+            split_dict[problem['ques_type']] = [k]
+        else:
+            split_dict[problem['ques_type']].append(k)
+    return q_dict
 
 
 with open(PROBLEM_DICT) as f:
@@ -75,6 +93,7 @@ def classify_all_entity(img_path, min_pixels=100):
         pis.append(pi)
     return pis, gimg
 
+
 def ent_img_to_sent(pis):
     return entities_to_sentence([classify_img(pi) for pi in pis])
 
@@ -92,19 +111,46 @@ def entities_to_sentence(entities):
 
 def predict_multiple_choice(prompt, candidates):
     model, tokenizer = get_desc_model()
-    inputs = tokenizer([[prompt, x] for x in candidates], return_tensors="pt", padding=True).to(device)
+    inputs = tokenizer([[prompt, x] for x in candidates],
+                       return_tensors="pt", padding=True).to(device)
     with torch.no_grad():
         outputs = model(**{k: v.unsqueeze(0) for k, v in inputs.items()})
         logits = outputs.logits
         return logits.argmax().item()
 
 
-example_paths = glob.glob(os.path.join(ICON_QA_DATA_DIR, TASK, '*'))
+example_paths = glob.glob(os.path.join(ICON_QA_DATA_DIR, '*/*/*'))
 id2path = {os.path.basename(p): p for p in example_paths}
 st.title('Context Enrichment for Mathematics Abstract VQA')
 
+split2display = {
+    'train': 'Train',
+    'val': 'Validation',
+    'test': 'Test'
+}
+
+task2display = {
+    'choose_img': 'Multiple choice Image',
+    'choose_txt': 'Multiple choice Text',
+    'fill_in_blank': 'Abstract text answer'
+}
+
+col1, col2 = st.columns(2)
+with col1:
+    subtask = st.selectbox('Choose task', [
+        'choose_img', 'choose_txt', 'fill_in_blank'], format_func=lambda x: task2display[x])
+
+with col2:
+    split = st.selectbox('Choose data split', [
+        'test', 'val',  'train'],  format_func=lambda x: split2display[x])
+
+# filtered_questions = get_question_dict()[split][subtask]
+# filtered_q_ids = [x['id'] for x in filtered_questions]
+
+filtered_q_ids = get_question_dict()[split][subtask]
+
 iconqa_qid = st.selectbox(
-    'Choose an example', id2path.keys(), format_func=lambda x: f'{x}: {problem_dict[x]["question"]}')
+    'Choose an example', filtered_q_ids, format_func=lambda x: f'{x}: {problem_dict[x]["question"]}')
 
 st.subheader('Question:')
 image_path = os.path.join(id2path[iconqa_qid], 'image.png')
@@ -114,14 +160,17 @@ st.image(remove_border(image))
 with open(os.path.join(id2path[iconqa_qid], 'data.json')) as f:
     q_data = json.load(f)
 
-st.subheader('Choices:')
-choice_cols = st.columns(len(q_data['choices']))
-for col, choice_img in zip(choice_cols, q_data['choices']):
-    image = Image.open(os.path.join(id2path[iconqa_qid], choice_img))
-    col.image(remove_border(image))
+if subtask in ['choose_img', 'choose_txt']:
+    st.subheader('Choices:')
+    choice_cols = st.columns(len(q_data['choices']))
+    for col, q_choice in zip(choice_cols, q_data['choices']):
+        if subtask == 'choose_img':
+            image = Image.open(os.path.join(id2path[iconqa_qid], q_choice))
+            col.image(remove_border(image))
+        else:
+            col.info(f'**{q_choice}**')
 
-
-col1,col2,col3 = st.columns(3)
+col1, col2, col3 = st.columns(3)
 with col2:
     perform_btn = st.button('Perform Method', type='primary')
 
@@ -145,20 +194,24 @@ if perform_btn:
                 col.caption(pi_class)
         context_enrich = entities_to_sentence(entities)
         st.markdown("""---""")
+        st.subheader('Context Enrichment')
         st.markdown(f'**Context Enrichment:** **:red[{context_enrich}]**')
-        st.markdown(f'**Generated Textual Choices**')
-        candidate_choices = []
-        choice_cols = st.columns(len(q_data['choices']))
-        for col, choice_img in zip(choice_cols, q_data['choices']):
-            img_path = os.path.join(id2path[iconqa_qid], choice_img)
-            # Generate textual choice
-            pis, _ = classify_all_entity(img_path)
-            textual_choice = ent_img_to_sent(pis)
-            candidate_choices.append(textual_choice)
-            col.markdown(f'**:red[{textual_choice}]**')
-            # Show choice image
-            image = Image.open(img_path)
-            col.image(remove_border(image))
+        if subtask == 'choose_img':
+            st.markdown(f'**Generated Textual Choices**')
+            candidate_choices = []
+            choice_cols = st.columns(len(q_data['choices']))
+            for col, choice_img in zip(choice_cols, q_data['choices']):
+                img_path = os.path.join(id2path[iconqa_qid], choice_img)
+                # Generate textual choice
+                pis, _ = classify_all_entity(img_path)
+                textual_choice = ent_img_to_sent(pis)
+                candidate_choices.append(textual_choice)
+                col.markdown(f'**:red[{textual_choice}]**')
+                # Show choice image
+                image = Image.open(img_path)
+                col.image(remove_border(image))
+        elif subtask == 'choose_txt':
+            candidate_choices = q_data['choices']
 
         st.markdown("""---""")
         st.subheader('Answer Prediction')
@@ -166,24 +219,21 @@ if perform_btn:
         with col2:
             st.markdown(f'**:red[Answer]**')
             prompt = f'{q_data["question"]} {context_enrich}'
-            answer_idx = predict_multiple_choice(prompt, candidate_choices )
-            img_path = os.path.join(id2path[iconqa_qid], q_data['choices'][answer_idx])
-            image = Image.open(img_path)
-            st.image(remove_border(image))
-        
-        
-
-        
-
-        
-    
-            
+            answer_idx = predict_multiple_choice(prompt, candidate_choices)
+            if subtask == 'choose_img':
+                img_path = os.path.join(
+                    id2path[iconqa_qid], q_data['choices'][answer_idx])
+                image = Image.open(img_path)
+                st.image(remove_border(image))
+            elif subtask == 'choose_txt':
+                st.info(q_data['choices'][answer_idx])
 
     st.markdown("""---""")
     st.subheader('Attention Visualization')
     with st.spinner('Visualizing Attention'):
         model_version = '/home/khangln/H_JAIST_DRIVE/WORK/iconqa_project/entity-detect-for-iconqa/models/bert-base-cased-train-both-img-txt'
-        model = BertForQuestionAnswering.from_pretrained(model_version, output_attentions=True)
+        model = BertForQuestionAnswering.from_pretrained(
+            model_version, output_attentions=True)
         tokenizer = BertTokenizer.from_pretrained(model_version)
         # sentence_a = q_data['question']
         # sentence_b = context_enrich
@@ -193,19 +243,21 @@ if perform_btn:
         # attention = model(input_ids, token_type_ids=token_type_ids)[-1]
         # sentence_b_start = token_type_ids[0].tolist().index(1)
         # input_id_list = input_ids[0].tolist() # Batch index 0
-        # tokens = tokenizer.convert_ids_to_tokens(input_id_list) 
+        # tokens = tokenizer.convert_ids_to_tokens(input_id_list)
 
-        def visualize_info(sent1,sent2):
+        def visualize_info(sent1, sent2):
             inputs = tokenizer.encode_plus(sent1, sent2, return_tensors='pt')
             input_ids = inputs['input_ids']
             token_type_ids = inputs['token_type_ids']
             attention = model(input_ids, token_type_ids=token_type_ids)[-1]
             sentence_b_start = token_type_ids[0].tolist().index(1)
-            input_id_list = input_ids[0].tolist() # Batch index 0
-            tokens = tokenizer.convert_ids_to_tokens(input_id_list) 
+            input_id_list = input_ids[0].tolist()  # Batch index 0
+            tokens = tokenizer.convert_ids_to_tokens(input_id_list)
             att_shape = attention[0].shape
-            my_att = [torch.broadcast_to(torch.sum(att, dim=1, keepdim=True), (1,12, att_shape[2], att_shape[3])) for att in attention]
+            my_att = [torch.broadcast_to(torch.sum(
+                att, dim=1, keepdim=True), (1, 12, att_shape[2], att_shape[3])) for att in attention]
             return my_att, tokens, sentence_b_start
 
-        html_obj = head_view(*visualize_info(q_data['question'], context_enrich + '[SEP]' + '[SEP]'.join(candidate_choices)), html_action='return', heads=[0])
+        html_obj = head_view(*visualize_info(q_data['question'], context_enrich + '[SEP]' + '[SEP]'.join(
+            candidate_choices)), html_action='return', heads=[0])
         components.v1.html(html_obj._repr_html_(), height=500)
